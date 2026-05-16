@@ -680,6 +680,22 @@ function drawStroke(s) {
 }
 
 function drawShape(s, isPreview = false) {
+  if (s.type === 'textbox-preview') {
+    ctx.save();
+    ctx.strokeStyle = '#6c63ff';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    const x = Math.min(s.x, s.x2 ?? s.x);
+    const y = Math.min(s.y, s.y2 ?? s.y);
+    const w = Math.abs((s.x2 ?? s.x) - s.x);
+    const h = Math.abs((s.y2 ?? s.y) - s.y);
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(108,99,255,0.05)';
+    ctx.fillRect(x, y, w, h);
+    ctx.setLineDash([]);
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.strokeStyle = s.color;
   ctx.lineWidth = s.strokeWidth || 2;
@@ -744,24 +760,11 @@ function drawShape(s, isPreview = false) {
 }
 
 function drawTextNode(t) {
-  ctx.save();
-  ctx.fillStyle = t.color;
-  ctx.font = (t.bold ? 'bold ' : '') + t.fontSize + 'px Syne, sans-serif';
-  ctx.fillText(t.text, t.x, t.y);
-  if (state.selectedIds.has(t.id)) {
-    const m = ctx.measureText(t.text);
-    ctx.strokeStyle = '#6c63ff';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3, 2]);
-    ctx.strokeRect(t.x - 4, t.y - t.fontSize, m.width + 8, t.fontSize + 8);
-    ctx.setLineDash([]);
-  }
-  ctx.restore();
+  // Text nodes are now DOM elements — nothing to draw on canvas
 }
 
 // ---
 function updateFloatingElements() {
-  // Position sticky notes and code cards based on viewport transform
   for (const note of state.stickyNotes) {
     const el = document.getElementById('sticky-' + note.id);
     if (el) {
@@ -770,7 +773,6 @@ function updateFloatingElements() {
       el.style.top = s.y + 'px';
       el.style.width = (note.w * state.viewport.scale) + 'px';
       el.style.minHeight = (note.h * state.viewport.scale) + 'px';
-      el.style.transform = 'scale(1)';
     }
   }
   for (const card of state.codeCards) {
@@ -781,6 +783,9 @@ function updateFloatingElements() {
       el.style.top = s.y + 'px';
       el.style.width = Math.max(280, card.w * state.viewport.scale) + 'px';
     }
+  }
+  for (const node of state.textNodes) {
+    updateTextNodePosition(node);
   }
 }
 
@@ -1021,7 +1026,12 @@ function onMouseDown(e) {
   }
 
   if (state.tool === 'text') {
-    showTextInput(e.clientX, e.clientY, wx, wy);
+    state.isDrawing = true;
+    state.currentShape = {
+      id: uid(), type: 'textbox-preview',
+      x: wx, y: wy, x2: wx, y2: wy,
+      color: state.color, fill: 'none', strokeWidth: 1,
+    };
   }
 
   if (state.tool === 'select') {
@@ -1094,12 +1104,22 @@ function onMouseUp(e) {
     renderAll();
   }
   if (state.isDrawing && state.currentShape) {
-    const w = Math.abs(state.currentShape.x2 - state.currentShape.x);
-    const h = Math.abs(state.currentShape.y2 - state.currentShape.y);
-    if (w > 4 || h > 4) state.shapes.push(state.currentShape);
+    const s = state.currentShape;
+    const w = Math.abs(s.x2 - s.x);
+    const h = Math.abs(s.y2 - s.y);
     state.currentShape = null;
     state.isDrawing = false;
-    scheduleAutosave();
+    if (s.type === 'textbox-preview') {
+      // Create a text element — minimum size 80x40
+      const tx = Math.min(s.x, s.x2);
+      const ty = Math.min(s.y, s.y2);
+      const tw = Math.max(80, w);
+      const th = Math.max(40, h);
+      addTextElement(tx, ty, tw, th, '', state.color);
+    } else {
+      if (w > 4 || h > 4) state.shapes.push(s);
+      scheduleAutosave();
+    }
     renderAll();
   }
 }
@@ -1180,53 +1200,118 @@ function hitTest(wx, wy) {
 }
 
 // ---
-const textOverlay = document.getElementById('text-input-overlay');
-let textEditPos = null;
-
-function showTextInput(clientX, clientY, wx, wy) {
-  textEditPos = { wx, wy };
-  textOverlay.style.display = 'block';
-  textOverlay.style.left = clientX + 'px';
-  textOverlay.style.top = clientY + 'px';
-  textOverlay.value = '';
-  textOverlay.style.fontSize = Math.max(12, 16 * state.viewport.scale) + 'px';
-  textOverlay.style.color = state.color;
-  setTimeout(function() { textOverlay.focus(); }, 50);
+// DOM-BASED TEXT ELEMENTS
+function addTextElement(wx, wy, ww, wh, text, color) {
+  const id = uid();
+  const node = { id, x: wx, y: wy, w: ww, h: wh, text: text || '', color: color || '#e8e8f0', fontSize: 16 };
+  state.textNodes.push(node);
+  renderTextNodeDOM(node, true);
+  pushUndo();
+  scheduleAutosave();
+  renderAll();
 }
 
-textOverlay.addEventListener('keydown', (e) => {
-  e.stopPropagation();
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    commitText();
-  }
-  if (e.key === 'Escape') {
-    textOverlay.style.display = 'none';
-    textOverlay.value = '';
-    textEditPos = null;
-  }
-});
+function renderTextNodeDOM(node, startEditing) {
+  const el = document.createElement('div');
+  el.id = 'text-' + node.id;
+  el.style.cssText = 'position:absolute;z-index:200;border:1.5px dashed rgba(108,99,255,0.5);border-radius:4px;box-sizing:border-box;min-width:80px;min-height:36px;cursor:move;';
 
-textOverlay.addEventListener('blur', () => {
-  if (textOverlay.style.display !== 'none') {
-    commitText();
-  }
-});
+  const ta = document.createElement('textarea');
+  ta.style.cssText = 'width:100%;height:100%;min-height:36px;background:transparent;border:none;outline:none;resize:none;font-family:Syne,sans-serif;font-size:16px;line-height:1.5;color:' + node.color + ';cursor:text;padding:4px 6px;box-sizing:border-box;overflow:hidden;';
+  ta.value = node.text;
+  ta.placeholder = 'Type here...';
+  el.appendChild(ta);
 
-function commitText() {
-  if (textOverlay.style.display === 'none') return;
-  const text = textOverlay.value.trim();
-  if (text && textEditPos) {
-    state.textNodes.push({
-      id: uid(), x: textEditPos.wx, y: textEditPos.wy,
-      text, fontSize: 16, color: state.color, bold: false,
-    });
+  const resizeHandle = document.createElement('div');
+  resizeHandle.style.cssText = 'position:absolute;bottom:0;right:0;width:12px;height:12px;cursor:se-resize;background:linear-gradient(135deg,transparent 50%,rgba(108,99,255,0.6) 50%);border-radius:0 0 4px 0;';
+  el.appendChild(resizeHandle);
+
+  // Show border on hover/focus, hide when idle
+  ta.addEventListener('focus', function() {
+    el.style.borderColor = '#6c63ff';
+    el.style.borderStyle = 'solid';
+  });
+  ta.addEventListener('blur', function() {
+    node.text = ta.value;
+    el.style.borderColor = 'rgba(108,99,255,0.3)';
+    el.style.borderStyle = 'dashed';
     scheduleAutosave();
-    renderAll();
+  });
+  ta.addEventListener('input', function() {
+    node.text = ta.value;
+    // Auto-grow height
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+    node.h = ta.scrollHeight / state.viewport.scale;
+    scheduleAutosave();
+  });
+  ta.addEventListener('keydown', function(e) {
+    e.stopPropagation();
+    if (e.key === 'Escape') { ta.blur(); }
+  });
+
+  // Click on el (not textarea) selects it
+  el.addEventListener('mousedown', function(e) {
+    e.stopPropagation();
+    if (e.target === ta) return;
+  });
+
+  // Drag via the element border area
+  el.addEventListener('mousedown', function(e) {
+    if (e.target === ta || e.target === resizeHandle) return;
+    e.stopPropagation();
+    const contRect = container.getBoundingClientRect();
+    const ox = e.clientX - el.getBoundingClientRect().left;
+    const oy = e.clientY - el.getBoundingClientRect().top;
+    state.dragEl = { el, dataObj: node, ox, oy };
+  });
+
+  // Resize
+  resizeHandle.addEventListener('mousedown', function(e) {
+    e.stopPropagation();
+    state.resizeEl = { el, dataObj: node, startX: e.clientX, startY: e.clientY, startW: node.w, startH: node.h };
+  });
+
+  // Double-click anywhere on el to edit
+  el.addEventListener('dblclick', function(e) {
+    e.stopPropagation();
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  });
+
+  // Delete on Backspace when el is focused (not textarea)
+  el.addEventListener('keydown', function(e) {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && e.target !== ta) {
+      removeTextNode(node.id);
+    }
+  });
+
+  el.tabIndex = 0;
+  container.appendChild(el);
+  updateTextNodePosition(node);
+
+  if (startEditing) {
+    setTimeout(function() { ta.focus(); }, 30);
   }
-  textOverlay.style.display = 'none';
-  textOverlay.value = '';
-  textEditPos = null;
+}
+
+function updateTextNodePosition(node) {
+  const el = document.getElementById('text-' + node.id);
+  if (!el) return;
+  const s = worldToScreen(node.x, node.y);
+  el.style.left = s.x + 'px';
+  el.style.top = s.y + 'px';
+  el.style.width = Math.max(80, node.w * state.viewport.scale) + 'px';
+  el.style.minHeight = Math.max(36, node.h * state.viewport.scale) + 'px';
+  const ta = el.querySelector('textarea');
+  if (ta) ta.style.color = node.color;
+}
+
+function removeTextNode(id) {
+  state.textNodes = state.textNodes.filter(n => n.id !== id);
+  const el = document.getElementById('text-' + id);
+  if (el) el.remove();
+  pushUndo(); scheduleAutosave();
 }
 
 // ---
@@ -1500,10 +1585,11 @@ function exportPNG() {
 document.getElementById('btn-clear').addEventListener('click', () => {
   if (confirm('Clear the entire whiteboard? This cannot be undone.')) {
     pushUndo();
-    state.strokes = []; state.shapes = []; state.textNodes = [];
+    state.strokes = []; state.shapes = [];
     state.stickyNotes.forEach(n => { const el = document.getElementById('sticky-' + n.id); if (el) el.remove(); });
     state.codeCards.forEach(c => { const el = document.getElementById('code-' + c.id); if (el) el.remove(); });
-    state.stickyNotes = []; state.codeCards = [];
+    state.textNodes.forEach(t => { const el = document.getElementById('text-' + t.id); if (el) el.remove(); });
+    state.stickyNotes = []; state.codeCards = []; state.textNodes = [];
     vscode.postMessage({ type: 'clearBoard' });
     renderAll(); showToast('Board cleared');
   }
@@ -1534,8 +1620,10 @@ function deserializeState(json) {
 
   state.stickyNotes = s.stickyNotes || [];
   state.codeCards = s.codeCards || [];
+  state.textNodes = s.textNodes || [];
   state.stickyNotes.forEach(n => renderStickyDOM(n));
   state.codeCards.forEach(c => renderCodeCardDOM(c));
+  state.textNodes.forEach(n => renderTextNodeDOM(n, false));
 }
 
 // ---
@@ -1567,6 +1655,7 @@ window.addEventListener('message', (e) => {
         state.viewport = msg.savedState.viewport || { x: 0, y: 0, scale: 1 };
         (msg.savedState.stickyNotes || []).forEach(n => { state.stickyNotes.push(n); renderStickyDOM(n); });
         (msg.savedState.codeCards || []).forEach(c => { state.codeCards.push(c); renderCodeCardDOM(c); });
+        (msg.savedState.textNodes || []).forEach(n => renderTextNodeDOM(n, false));
       }
       applyTheme(msg.theme || 'dark');
       renderAll();
