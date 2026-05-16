@@ -1,0 +1,56 @@
+{
+  "name": "vscode-drawboard",
+  "displayName": "DrawBoard by Wasif",
+  "description": "A fully-featured in-editor whiteboard for sketching, diagramming, and dry-running code logic — no third-party tools needed.",
+  "version": "1.0.0",
+  "publisher": "mohammed-wasif-ahmed",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other", "Visualization"],
+  "keywords": ["whiteboard", "sketch", "diagram", "canvas", "drawing"],
+  "icon": "media/icon.png",
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "whiteboard.open", "title": "Open Whiteboard", "category": "Whiteboard", "icon": "$(edit)" },
+      { "command": "whiteboard.openWithCode", "title": "Open Whiteboard with Current File", "category": "Whiteboard", "icon": "$(file-code)" },
+      { "command": "whiteboard.newBoard", "title": "New Whiteboard", "category": "Whiteboard", "icon": "$(add)" }
+    ],
+    "menus": {
+      "editor/title": [
+        { "command": "whiteboard.openWithCode", "group": "navigation", "when": "editorIsOpen" }
+      ]
+    },
+    "keybindings": [
+      { "command": "whiteboard.open", "key": "ctrl+shift+w", "mac": "cmd+shift+w" },
+      { "command": "whiteboard.openWithCode", "key": "ctrl+shift+alt+w", "mac": "cmd+shift+alt+w" }
+    ],
+    "configuration": {
+      "title": "Whiteboard",
+      "properties": {
+        "whiteboard.theme": {
+          "type": "string", "default": "dark", "enum": ["dark", "light"],
+          "description": "Default theme for the whiteboard"
+        },
+        "whiteboard.autosave": {
+          "type": "boolean", "default": true,
+          "description": "Automatically save whiteboard state between sessions"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node_modules/.bin/esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "dev": "node_modules/.bin/esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
+    "compile": "node_modules/.bin/tsc --noEmit",
+    "package": "npx @vscode/vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0"
+  },
+  "license": "MIT"
+}
