@@ -1,23 +1,10 @@
 import * as vscode from 'vscode';
 
-function getNonce(): string {
-  let text = '';
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  for (let i = 0; i < 32; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
-  }
-  return text;
-}
-
 export function getWhiteboardHTML(webview: vscode.Webview, _extensionUri: vscode.Uri): string {
-  const nonce = getNonce();
-  const csp = `default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'nonce-${nonce}'; img-src data: blob:;`;
-  const scriptOpen = `<script nonce="${nonce}">`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta http-equiv="Content-Security-Policy" content="${csp}">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Whiteboard</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
@@ -557,13 +544,11 @@ body {
 <!-- TOAST -->
 <div id="toast"></div>
 
-${scriptOpen}
-// ──────────────────────────────────────────────
+<script>
 // WHITEBOARD ENGINE
-// ──────────────────────────────────────────────
 const vscode = acquireVsCodeApi();
 
-// ── STATE ──
+// ---
 const state = {
   tool: 'pen',
   color: '#e8e8f0',
@@ -590,7 +575,7 @@ const state = {
   ctxMenuTarget: null,
 };
 
-// ── CANVAS SETUP ──
+// ---
 const container = document.getElementById('canvas-container');
 const canvas = document.getElementById('main-canvas');
 const ctx = canvas.getContext('2d');
@@ -610,7 +595,7 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ── COORDINATE TRANSFORMS ──
+// ---
 function screenToWorld(sx, sy) {
   return {
     x: (sx - state.viewport.x) / state.viewport.scale,
@@ -624,7 +609,7 @@ function worldToScreen(wx, wy) {
   };
 }
 
-// ── GRID ──
+// ---
 function drawGrid() {
   const w = gridCanvas.width, h = gridCanvas.height;
   gridCtx.clearRect(0, 0, w, h);
@@ -643,7 +628,7 @@ function drawGrid() {
   }
 }
 
-// ── RENDER ──
+// ---
 function renderAll() {
   const w = canvas.width, h = canvas.height;
   ctx.clearRect(0, 0, w, h);
@@ -771,7 +756,7 @@ function drawTextNode(t) {
   ctx.restore();
 }
 
-// ── FLOATING ELEMENTS ──
+// ---
 function updateFloatingElements() {
   // Position sticky notes and code cards based on viewport transform
   for (const note of state.stickyNotes) {
@@ -796,7 +781,7 @@ function updateFloatingElements() {
   }
 }
 
-// ── STICKY NOTES ──
+// ---
 function addStickyNote(wx, wy, text = '', color = '#ffd166') {
   const id = uid();
   const note = { id, x: wx, y: wy, w: 200, h: 140, text, color };
@@ -813,19 +798,45 @@ function renderStickyDOM(note) {
   el.id = 'sticky-' + note.id;
   el.className = 'floating-el sticky-note';
   el.style.background = note.color;
-  el.innerHTML = \`
-    <div class="el-header" style="background:rgba(0,0,0,0.15)">
-      <span style="font-size:10px">📝 NOTE</span>
-      <div style="display:flex;gap:3px;margin-left:4px">
-        \${stickyColors.map(c => \`<div onclick="changeStickyColor('\${note.id}','\${c}')" style="width:12px;height:12px;border-radius:50%;background:\${c};cursor:pointer;border:1px solid rgba(0,0,0,0.2)"></div>\`).join('')}
-      </div>
-      <button class="el-close" onclick="removeSticky('\${note.id}')">✕</button>
-    </div>
-    <textarea class="sticky-body" placeholder="Write here..." style="background:transparent;border:none;outline:none;resize:none;width:100%;padding:10px;font-family:'Syne',sans-serif;font-size:13px;line-height:1.5;color:#1a1a1a;min-height:100px">\${note.text}</textarea>
-    <div class="resize-handle"></div>
-  \`;
 
-  el.querySelector('textarea').addEventListener('input', (e) => {
+  const header = document.createElement('div');
+  header.className = 'el-header';
+  header.style.cssText = 'background:rgba(0,0,0,0.15)';
+
+  const label = document.createElement('span');
+  label.style.fontSize = '10px';
+  label.textContent = 'NOTE';
+  header.appendChild(label);
+
+  const colorRow = document.createElement('div');
+  colorRow.style.cssText = 'display:flex;gap:3px;margin-left:4px';
+  stickyColors.forEach(function(c) {
+    const dot = document.createElement('div');
+    dot.style.cssText = 'width:12px;height:12px;border-radius:50%;background:' + c + ';cursor:pointer;border:1px solid rgba(0,0,0,0.2)';
+    dot.onclick = function() { changeStickyColor(note.id, c); };
+    colorRow.appendChild(dot);
+  });
+  header.appendChild(colorRow);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'el-close';
+  closeBtn.textContent = 'x';
+  closeBtn.onclick = function() { removeSticky(note.id); };
+  header.appendChild(closeBtn);
+  el.appendChild(header);
+
+  const ta = document.createElement('textarea');
+  ta.className = 'sticky-body';
+  ta.placeholder = 'Write here...';
+  ta.style.cssText = 'background:transparent;border:none;outline:none;resize:none;width:100%;padding:10px;font-family:Syne,sans-serif;font-size:13px;line-height:1.5;color:#1a1a1a;min-height:100px';
+  ta.value = note.text || '';
+  el.appendChild(ta);
+
+  const resizeHandle = document.createElement('div');
+  resizeHandle.className = 'resize-handle';
+  el.appendChild(resizeHandle);
+
+  ta.addEventListener('input', function(e) {
     note.text = e.target.value;
     scheduleAutosave();
   });
@@ -852,7 +863,7 @@ function removeSticky(id) {
   pushUndo(); scheduleAutosave();
 }
 
-// ── CODE CARDS ──
+// ---
 function addCodeCard(wx, wy, code = '', language = 'javascript', fileName = 'snippet') {
   const id = uid();
   const card = { id, x: wx, y: wy, w: 400, h: 300, code, language, fileName, minimized: false };
@@ -866,18 +877,49 @@ function renderCodeCardDOM(card) {
   const el = document.createElement('div');
   el.id = 'code-' + card.id;
   el.className = 'floating-el code-card';
-  el.innerHTML = \`
-    <div class="el-header" style="background:var(--surface2)">
-      <span class="lang-badge">\${card.language.toUpperCase()}</span>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer" onclick="jumpToFile('\${card.fileName}')" title="Jump to file">\${card.fileName}</span>
-      <button class="el-close" style="background:rgba(108,99,255,0.4)" onclick="toggleMinimizeCode('\${card.id}')">▾</button>
-      <button class="el-close" onclick="removeCodeCard('\${card.id}')">✕</button>
-    </div>
-    <div class="code-body" id="code-body-\${card.id}" contenteditable="true">\${escapeHtml(card.code)}</div>
-    <div class="resize-handle"></div>
-  \`;
 
-  el.querySelector('.code-body').addEventListener('input', (e) => {
+  const header = document.createElement('div');
+  header.className = 'el-header';
+  header.style.cssText = 'background:var(--surface2)';
+
+  const badge = document.createElement('span');
+  badge.className = 'lang-badge';
+  badge.textContent = (card.language || 'text').toUpperCase();
+  header.appendChild(badge);
+
+  const fileLabel = document.createElement('span');
+  fileLabel.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer";
+  fileLabel.title = 'Jump to file';
+  fileLabel.textContent = card.fileName || 'snippet';
+  fileLabel.onclick = function() { jumpToFile(card.fileName); };
+  header.appendChild(fileLabel);
+
+  const minBtn = document.createElement('button');
+  minBtn.className = 'el-close';
+  minBtn.style.cssText = 'background:rgba(108,99,255,0.4)';
+  minBtn.textContent = 'v';
+  minBtn.onclick = function() { toggleMinimizeCode(card.id); };
+  header.appendChild(minBtn);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'el-close';
+  closeBtn.textContent = 'x';
+  closeBtn.onclick = function() { removeCodeCard(card.id); };
+  header.appendChild(closeBtn);
+  el.appendChild(header);
+
+  const codeBody = document.createElement('div');
+  codeBody.className = 'code-body';
+  codeBody.id = 'code-body-' + card.id;
+  codeBody.contentEditable = 'true';
+  codeBody.textContent = card.code || '';
+  el.appendChild(codeBody);
+
+  const resizeHandle = document.createElement('div');
+  resizeHandle.className = 'resize-handle';
+  el.appendChild(resizeHandle);
+
+  codeBody.addEventListener('input', function(e) {
     card.code = e.target.innerText;
     scheduleAutosave();
   });
@@ -906,7 +948,7 @@ function jumpToFile(fileName) {
   vscode.postMessage({ type: 'openFile', fileName });
 }
 
-// ── DRAG & RESIZE ──
+// ---
 function makeDraggable(el, dataObj, kind) {
   const header = el.querySelector('.el-header');
   if (!header) return;
@@ -930,7 +972,7 @@ function makeResizable(el, dataObj) {
   });
 }
 
-// ── MOUSE EVENTS ──
+// ---
 canvas.addEventListener('mousedown', onMouseDown);
 canvas.addEventListener('mousemove', onMouseMove);
 canvas.addEventListener('mouseup', onMouseUp);
@@ -1089,7 +1131,7 @@ function onDocMouseUp() {
   state.resizeEl = null;
 }
 
-// ── WHEEL ZOOM ──
+// ---
 function onWheel(e) {
   e.preventDefault();
   const factor = e.deltaY > 0 ? 0.92 : 1.08;
@@ -1101,7 +1143,7 @@ function onWheel(e) {
   renderAll();
 }
 
-// ── ERASER LOGIC ──
+// ---
 function eraseAt(points) {
   const radius = state.strokeWidth * 4;
   state.strokes = state.strokes.filter(s => {
@@ -1116,7 +1158,7 @@ function eraseAt(points) {
   });
 }
 
-// ── HIT TESTING ──
+// ---
 function hitTest(wx, wy) {
   // Check shapes in reverse (top-most first)
   for (let i = state.shapes.length - 1; i >= 0; i--) {
@@ -1134,7 +1176,7 @@ function hitTest(wx, wy) {
   return null;
 }
 
-// ── TEXT INPUT ──
+// ---
 const textOverlay = document.getElementById('text-input-overlay');
 let textEditPos = null;
 
@@ -1179,7 +1221,7 @@ function commitText() {
   textEditPos = null;
 }
 
-// ── CONTEXT MENU ──
+// ---
 function onContextMenu(e) {
   e.preventDefault();
   const mx = e.offsetX, my = e.offsetY;
@@ -1220,7 +1262,7 @@ document.getElementById('ctx-duplicate').onclick = () => {
   closePopups();
 };
 
-// ── MINIMAP ──
+// ---
 function updateMinimap() {
   const mc = minimapCanvas;
   minimapCtx.clearRect(0, 0, mc.width, mc.height);
@@ -1251,7 +1293,7 @@ function updateMinimap() {
   minimapCtx.strokeRect(0, 0, mc.width, mc.height);
 }
 
-// ── ZOOM CONTROLS ──
+// ---
 function setZoom(newScale, cx, cy) {
   cx = cx ?? canvas.width / 2; cy = cy ?? canvas.height / 2;
   const ns = Math.min(4, Math.max(0.1, newScale));
@@ -1270,7 +1312,7 @@ function updateZoomIndicator() {
   document.getElementById('btn-zoom-reset').textContent = Math.round(state.viewport.scale * 100) + '%';
 }
 
-// ── UNDO / REDO ──
+// ---
 function pushUndo() {
   const snapshot = serializeState();
   state.undoStack.push(snapshot);
@@ -1297,7 +1339,7 @@ function redo() {
 document.getElementById('btn-undo').onclick = undo;
 document.getElementById('btn-redo').onclick = redo;
 
-// ── KEYBOARD SHORTCUTS ──
+// ---
 document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.isContentEditable) return;
   const key = e.key.toLowerCase();
@@ -1318,7 +1360,7 @@ document.addEventListener('keydown', (e) => {
   if (key in toolMap) { e.preventDefault(); setTool(toolMap[key]); }
 });
 
-// ── TOOL SELECTION ──
+// ---
 function setTool(tool) {
   state.tool = tool;
   document.querySelectorAll('[data-tool]').forEach(b => b.classList.remove('active'));
@@ -1335,7 +1377,7 @@ document.querySelectorAll('[data-tool]').forEach(btn => {
   });
 });
 
-// ── COLOR SELECTION ──
+// ---
 const PALETTE = [
   '#ffffff','#e8e8f0','#c0c0cc','#888899','#555566','#222233','#000000',
   '#ff4455','#ff6584','#ff8c69','#ffd166','#f9c74f','#90be6d','#43e97b',
@@ -1379,7 +1421,7 @@ document.getElementById('custom-color-input').addEventListener('input', (e) => {
   selectColor(e.target.value);
 });
 
-// ── SHAPE PICKER ──
+// ---
 function showShapePicker() {
   const popup = document.getElementById('shape-picker-popup');
   const btn = document.getElementById('tool-shape');
@@ -1397,22 +1439,22 @@ document.querySelectorAll('.shape-opt').forEach(btn => {
   });
 });
 
-// ── STROKE WIDTH ──
+// ---
 document.getElementById('strokeWidth').addEventListener('input', (e) => {
   state.strokeWidth = parseInt(e.target.value);
 });
 
-// ── ADD BUTTONS ──
+// ---
 document.getElementById('add-sticky').addEventListener('click', () => {
   const { x, y } = screenToWorld(canvas.width / 2 - 100, canvas.height / 2 - 70);
   addStickyNote(x, y);
 });
 document.getElementById('add-code-card').addEventListener('click', () => {
   const { x, y } = screenToWorld(canvas.width / 2 - 200, canvas.height / 2 - 100);
-  addCodeCard(x, y, '// Paste or type your code here\n', 'javascript', 'snippet.js');
+  addCodeCard(x, y, '// Paste or type your code here', 'javascript', 'snippet.js');
 });
 
-// ── EXPORT ──
+// ---
 document.getElementById('btn-export').addEventListener('click', exportPNG);
 
 function exportPNG() {
@@ -1446,7 +1488,7 @@ function exportPNG() {
   showToast('Exported as PNG');
 }
 
-// ── CLEAR ──
+// ---
 document.getElementById('btn-clear').addEventListener('click', () => {
   if (confirm('Clear the entire whiteboard? This cannot be undone.')) {
     pushUndo();
@@ -1459,7 +1501,7 @@ document.getElementById('btn-clear').addEventListener('click', () => {
   }
 });
 
-// ── SERIALIZE / DESERIALIZE ──
+// ---
 function serializeState() {
   return JSON.stringify({
     strokes: state.strokes,
@@ -1488,7 +1530,7 @@ function deserializeState(json) {
   state.codeCards.forEach(c => renderCodeCardDOM(c));
 }
 
-// ── AUTOSAVE ──
+// ---
 let autosaveTimer = null;
 function scheduleAutosave() {
   clearTimeout(autosaveTimer);
@@ -1505,7 +1547,7 @@ function forceSave() {
   vscode.postMessage({ type: 'saveState', state: s });
 }
 
-// ── VS CODE MESSAGE HANDLER ──
+// ---
 window.addEventListener('message', (e) => {
   const msg = e.data;
   switch (msg.type) {
@@ -1541,7 +1583,7 @@ function applyTheme(theme) {
   renderAll();
 }
 
-// ── CLOSE POPUPS ──
+// ---
 function closePopups() {
   document.getElementById('color-picker-popup').style.display = 'none';
   document.getElementById('shape-picker-popup').style.display = 'none';
@@ -1559,7 +1601,7 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// ── TOAST ──
+// ---
 function showToast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -1567,7 +1609,7 @@ function showToast(msg) {
   setTimeout(() => el.classList.remove('show'), 1800);
 }
 
-// ── UTILS ──
+// ---
 function uid() {
   return Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
 }
@@ -1576,7 +1618,7 @@ function escapeHtml(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// ── READY ──
+// ---
 vscode.postMessage({ type: 'ready' });
 </script>
 </body>
