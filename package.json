@@ -52,5 +52,9 @@
     "esbuild": "^0.20.0",
     "typescript": "^5.3.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wasifahhme/vscode-drawboard.git"
+}
 }
