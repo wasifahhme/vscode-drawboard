@@ -252,23 +252,23 @@ body {
 
 /* ── TEXT INPUT ── */
 #text-input-overlay {
-  position: absolute;
+  position: fixed;
   display: none;
-  background: transparent;
+  background: rgba(30,30,40,0.95);
   border: 2px dashed var(--accent);
   border-radius: 4px;
-  padding: 4px 8px;
+  padding: 6px 10px;
   font-family: 'Syne', sans-serif;
   font-size: 16px;
   color: var(--text);
   outline: none;
-  min-width: 120px;
-  min-height: 30px;
-  z-index: 500;
+  min-width: 160px;
+  min-height: 36px;
+  z-index: 2000;
   resize: none;
   overflow: hidden;
+  pointer-events: all;
 }
-
 /* ── ERASER CURSOR ── */
 #eraser-cursor {
   position: fixed;
@@ -494,9 +494,11 @@ body {
   <canvas id="main-canvas"></canvas>
   <div id="ui-layer">
     <div id="selection-box"></div>
-    <textarea id="text-input-overlay" rows="1" placeholder="Type here..."></textarea>
   </div>
 </div>
+
+<!-- TEXT INPUT - outside canvas so focus works reliably -->
+<textarea id="text-input-overlay" rows="1" placeholder="Type here..."></textarea>
 
 <!-- ERASER CURSOR -->
 <div id="eraser-cursor"></div>
@@ -1019,7 +1021,7 @@ function onMouseDown(e) {
   }
 
   if (state.tool === 'text') {
-    showTextInput(mx, my, wx, wy);
+    showTextInput(e.clientX, e.clientY, wx, wy);
   }
 
   if (state.tool === 'select') {
@@ -1181,15 +1183,15 @@ function hitTest(wx, wy) {
 const textOverlay = document.getElementById('text-input-overlay');
 let textEditPos = null;
 
-function showTextInput(sx, sy, wx, wy) {
+function showTextInput(clientX, clientY, wx, wy) {
   textEditPos = { wx, wy };
   textOverlay.style.display = 'block';
-  textOverlay.style.left = sx + 'px';
-  textOverlay.style.top = (sy - 4) + 'px';
+  textOverlay.style.left = clientX + 'px';
+  textOverlay.style.top = clientY + 'px';
   textOverlay.value = '';
   textOverlay.style.fontSize = Math.max(12, 16 * state.viewport.scale) + 'px';
   textOverlay.style.color = state.color;
-  textOverlay.focus();
+  setTimeout(function() { textOverlay.focus(); }, 50);
 }
 
 textOverlay.addEventListener('keydown', (e) => {
