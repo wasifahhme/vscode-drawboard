@@ -2,7 +2,7 @@
   "name": "vscode-drawboard",
   "displayName": "DrawBoard by Wasif",
   "description": "A fully-featured in-editor whiteboard for sketching, diagramming, and dry-running code logic — no third-party tools needed.",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "publisher": "mohammed-wasif-ahmed",
   "engines": {
     "vscode": "^1.85.0"
