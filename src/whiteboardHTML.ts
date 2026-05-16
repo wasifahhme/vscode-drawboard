@@ -142,6 +142,7 @@ body {
 #bg-canvas { position: absolute; top:0;left:0; pointer-events: none; }
 #main-canvas { position: absolute; top:0;left:0; }
 #ui-layer { position: absolute; top:0;left:0; pointer-events: none; }
+#text-input-overlay { pointer-events: all; }
 
 /* Grid dots */
 .grid-canvas { position: absolute; top:0;left:0; pointer-events:none; }
@@ -1192,6 +1193,7 @@ function showTextInput(sx, sy, wx, wy) {
 }
 
 textOverlay.addEventListener('keydown', (e) => {
+  e.stopPropagation();
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     commitText();
@@ -1199,14 +1201,18 @@ textOverlay.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     textOverlay.style.display = 'none';
     textOverlay.value = '';
+    textEditPos = null;
   }
 });
 
 textOverlay.addEventListener('blur', () => {
-  commitText();
+  if (textOverlay.style.display !== 'none') {
+    commitText();
+  }
 });
 
 function commitText() {
+  if (textOverlay.style.display === 'none') return;
   const text = textOverlay.value.trim();
   if (text && textEditPos) {
     state.textNodes.push({
