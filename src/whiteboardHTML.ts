@@ -1,11 +1,19 @@
 import * as vscode from 'vscode';
-
+function getNonce(): string {
+  let text = '';
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  for (let i = 0; i < 32; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
+}
 export function getWhiteboardHTML(webview: vscode.Webview, _extensionUri: vscode.Uri): string {
+  const nonce = getNonce();
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline' https://cdnjs.cloudflare.com; img-src data: blob:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'nonce-${nonce}'; img-src data: blob:;">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Whiteboard</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
@@ -545,7 +553,7 @@ body {
 <!-- TOAST -->
 <div id="toast"></div>
 
-<script>
+<script nonce="${nonce}">
 // ──────────────────────────────────────────────
 // WHITEBOARD ENGINE
 // ──────────────────────────────────────────────
